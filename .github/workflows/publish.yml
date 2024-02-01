@@ -1,0 +1,43 @@
+name: Publish
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: ${{ steps.set_url.outputs.env_url }}
+
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.9'
+    - name: Check version
+      id: version
+      run: |
+        pkg_version="$(grep '^version =' pyproject.toml | sed 's/version = "\(.*\)"/\1/g')"
+        tag_version="$(echo "$GITHUB_REF" | sed -e "s#refs/tags/v##g")"
+        if [ "$pkg_version" != "$tag_version" ]; then
+          echo "Package version '$pkg_version' does not match tag version '$tag_version'!" >&2
+          exit 1
+        fi
+        echo "version=$tag_version" >> "$GITHUB_OUTPUT"
+    - name: Install build module
+      run: pip3 install build
+    - name: Build distribution
+      run: python3 -m build --sdist
+    - name: Publish distribution to PyPI
+      uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        user: __token__
+        password: ${{ secrets.PYPI_TOKEN }}
+    - name: Set environment url
+      id: set_url
+      run: |
+        version="${{ steps.version.outputs.version }}"
+        echo "env_url=https://pypi.org/project/midiloop/$version" >> "$GITHUB_OUTPUT"
